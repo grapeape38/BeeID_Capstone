@@ -1,17 +1,38 @@
 <template>
   <div id="app">
-    <img alt="Vue logo" src="./assets/logo.png">
-    <HelloWorld msg="Welcome to Your Vue.js App"/>
+    <BeeCanvas v-on:xml_upload="uploadXML($event)" v-bind:openCVReady="openCVReady" v-bind:class_url="class_url"/>
   </div>
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue'
+import BeeCanvas from './components/BeeCanvas.vue'
 
 export default {
   name: 'app',
   components: {
-    HelloWorld
+   BeeCanvas
+  },
+  mounted() {
+      let xmlFile = './rpi11b.xml';
+      this.$utils.loadOpenCv()
+        .then(() => {
+          this.$utils.createFileFromUrl(xmlFile, xmlFile);
+          this.openCVReady = true;
+      }).then(() => {
+          this.class_url = xmlFile;
+      })
+    },
+  methods: {
+    uploadXML(e) {
+      let xmlFile = e.target.files[0];
+      let url = URL.createObjectURL(xmlFile);
+      this.$utils.createFileFromUrl(xmlFile.name, url).then(() => {
+        this.class_url = xmlFile.name;
+      });
+    }
+  },
+  data: function() {
+    return { openCVReady: false, class_url: ""}
   }
 }
 </script>
