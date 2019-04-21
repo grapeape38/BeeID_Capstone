@@ -1,5 +1,82 @@
-const FPS = 60;
+/*global cv:true*/
+function logErr(err) {
+    if (typeof err === 'undefined') {
+        err = '';
+    } else if (typeof err === 'number') {
+        if (!isNaN(err)) {
+            if (typeof cv !== 'undefined') {
+                err = 'Exception: ' + cv.exceptionFromPtr(err).msg;
+            }
+        }
+    } else if (typeof err === 'string') {
+        let ptr = Number(err.split(' ')[0]);
+        if (!isNaN(ptr)) {
+            if (typeof cv !== 'undefined') {
+                err = 'Exception: ' + cv.exceptionFromPtr(ptr).msg;
+            }
+        }
+    } else if (err instanceof Error) {
+        err = err.stack.replace(/\n/g, '<br>');
+    }
+    console.log(err);
+}
+
+
 var self
+
+function randInt(max) {
+    return Math.floor(Math.random() * (max+1));
+}
+
+class Bee {
+    constructor(id, rect, features, frame) {
+        this.id = id;
+        this.features_ = features;
+        this.color_ = [randInt(255), randInt(255), randInt(255), 255]
+        this.valid_ = true;
+        this.history = [{rect: rect, frame: frame}];
+    }
+    get valid() {
+        return this.valid_;
+    }
+    set valid(val) {
+        this.valid_ = val;
+    }
+    get color() {
+        return this.color_;
+    }
+    get features() {
+        return this.features_;
+    }
+    set features(ft) {
+        this.features_ = ft;
+    }
+    get currRect() {
+        return this.history[this.history.length - 1].rect;
+    }
+    get lastActiveFrame() {
+        return this.history[this.history.length - 1].frame;
+    }
+    addRect(rect, frame) {
+        this.history.push({rect: rect, frame: frame});
+    }
+    adjustRect(x_off, y_off, frame) {
+        let r = this.currRect;
+        let r2 = new cv.Rect(r.x+x_off, r.y+y_off, r.width, r.height);
+        this.addRect(r2, frame);
+    }
+    contains(pt) {
+        return this.currRect.contains(pt);
+    }
+}
+
+const MAX_INACTIVE_FRAMES = 10;
+const MIN_TRACK_PCT = 0.3;
+const DETECT_INTERVAL = 6;
+const FPS = 30;
+
+/*hyper parameters!*/
+
 
 class BeeDetect {
     constructor(video, canvas_id, class_file) {
@@ -8,11 +85,30 @@ class BeeDetect {
         this.streaming = false;
         this.class_file = class_file;
         this.frame = new cv.Mat(video.height, video.width, cv.CV_8UC4);
-        self = this
+        this.curr_frame = 0;
+        this.activeBees = new Array();
+        this.archiveBees = new Array();
+        this.next_id = 0;
+
+        this.prev_frame = new cv.Mat()
+        this.corners = new cv.Mat();
+        this.status = new cv.Mat();
+        this.err = new cv.Mat();
+        this.track = new cv.Mat();
+
+        this.corner_pts = new Array(); 
+        this.track_pts = new Array();
+        this.point_map = new Array();
+        self = this;
     }
     
     destroy() {
         this.frame.delete();
+        this.prev_frame.delete();
+        this.corners.delete();
+        this.status.delete();
+        this.err.delete();
+        this.track.delete();
     }
 
     startDetect() {
@@ -24,6 +120,16 @@ class BeeDetect {
         this.streaming = false;
     }
 
+    copyTrackedPoints() {
+        this.corners.delete(); 
+        this.corners = new cv.Mat(this.track_pts.length, 1, cv.CV_32FC2);
+        this.corner_pts = this.track_pts;
+        for (let i = 0; i < this.track_pts.length; i++) {
+            this.corners.data32F[i*2] = this.track_pts[i].x;
+            this.corners.data32F[i*2+1] = this.track_pts[i].y;
+        }
+    }
+
     processFrame() {
         try {
             if (!self.streaming) {
@@ -32,39 +138,213 @@ class BeeDetect {
             }
             let begin = Date.now();
             self.cap.read(self.frame);
-            self.detectAndDraw(self.frame);
+            if (!self.corners.rows || !(self.curr_frame % DETECT_INTERVAL)) {
+                self.getFeatures();
+                self.detectBees();
+            }
+            else {
+                self.getOptFlow();
+                self.trackBees();
+                self.copyTrackedPoints();
+            }
+            self.removeOld();
+            self.drawBees();
             cv.imshow(self.canvas_id, self.frame);
+            self.curr_frame++;
+            self.frame.copyTo(self.prev_frame);
             let delay = 1000 / FPS - (Date.now() - begin);
             setTimeout(self.processFrame, delay);
         }
         catch(err) {
-            console.log("Error: ", err);
+            logErr(err);
         }
     }
 
-    detectAndDraw(canvas)  {
+    removeOld() {
+        this.activeBees = this.activeBees.filter((bee) => {
+            return this.curr_frame - bee.lastActiveFrame <= MAX_INACTIVE_FRAMES;
+        });
+    }
+
+    getFeatures() {
+        let canvas = this.frame
+        let gray = new cv.Mat()
+        let none = new cv.Mat()
+        let [maxCorners, qualityLevel, minDistance, blockSize] =
+            [150, 0.3, 7, 3]
+        cv.cvtColor(canvas, gray, cv.COLOR_RGBA2GRAY, 0);
+        cv.goodFeaturesToTrack(gray, this.corners, maxCorners, qualityLevel, minDistance, none, blockSize);
+        let r = 4;
+        this.corner_pts = []
+        for (let i = 0; i < this.corners.rows; i++) {
+            let [x,y] = [this.corners.data32F[i*2], this.corners.data32F[i*2+1]]
+            this.corner_pts.push(new cv.Point(x,y))
+        }
+        gray.delete();
+    }
+
+    getOptFlow() {
+        let p_gray = new cv.Mat()
+        let c_gray = new cv.Mat()
+        cv.cvtColor(this.prev_frame, p_gray, cv.COLOR_RGBA2GRAY, 0);
+        cv.cvtColor(this.frame, c_gray, cv.COLOR_RGBA2GRAY, 0);
+        let winSize = new cv.Size(15,15)
+        let maxLevel = 2;
+        let criteria = new cv.TermCriteria(cv.TERM_CRITERIA_EPS | cv.TERM_CRITERIA_COUNT, 10, 0.03);
+        cv.calcOpticalFlowPyrLK(p_gray, c_gray, this.corners, this.track, this.status, this.err, winSize, maxLevel, criteria);
+        this.track_pts = []
+        this.point_map = new Array(this.status.rows)
+        this.point_map.fill(-1);
+        let k = 0;
+        for (let i = 0; i < this.status.rows; i++) {
+            if (this.status.data[i] === 1) {
+                let [x,y] = [this.track.data32F[i*2], this.track.data32F[i*2+1]];
+                this.track_pts.push(new cv.Point(x,y));
+                this.point_map[i] = k++;
+            }
+        }
+        p_gray.delete();
+        c_gray.delete();
+    }
+
+    containsOtherRect(r1, r2) {
+        let p1 = new cv.Point(r2.x, r2.y);
+        return this.containsPoint(r1, p1) && r1.x + r1.width >= r2.x + r2.width &&
+            r1.y + r1.height >= r2.y + r2.height;
+    }
+
+    containsPoint(r, pt) {
+        return r.x <= pt.x && r.y <= pt.y && r.x + r.width >= pt.x && r.y + r.height >= pt.y;
+    }
+
+    trackBees() {
+        this.activeBees.forEach((b) => {
+            if (!b.valid) return;
+            let num_tracked = 0, tot_pts = 0;
+            let avg_x_offset = 0.0, avg_y_offset = 0.0;
+            b.features.forEach((idx, i) => {
+                if (idx >= 0 && this.status.data[idx]) {
+                    num_tracked++;
+                    let newPt = this.track_pts[this.point_map[idx]];
+                    avg_x_offset += newPt.x - this.corner_pts[idx].x;
+                    avg_y_offset += newPt.y - this.corner_pts[idx].y;
+                }
+                if (idx >= 0) tot_pts++;
+                b.features[i] = this.point_map[idx];
+            });
+            if (tot_pts == 0 || num_tracked / tot_pts < MIN_TRACK_PCT) {
+                b.valid = false;
+            }
+            else {
+                avg_x_offset /= num_tracked;
+                avg_y_offset /= num_tracked;
+                //console.log(avg_x_offset, avg_y_offset);
+                b.adjustRect(avg_x_offset, avg_y_offset, this.curr_frame);
+            }
+        });
+    }
+
+    getGoodBees(bees, beeFeatures) {
+        let isGood = new Array(bees.size())
+        //filter bees that contain other bees
+        for (let i = 0; i < bees.size(); i++) {
+            isGood[i] = beeFeatures.length > 0;
+        }
+        for (let i = 0; i < bees.size() - 1; i++) {
+            if (isGood[i]) {
+                let b1 = bees.get(i);
+                for (let j = i+1; j < bees.size(); j++) {
+                    let b2 = bees.get(j);
+                    if (this.containsOtherRect(b1, b2)) {
+                        isGood[i] = false;
+                        break;
+                    }
+                    if (this.containsOtherRect(b2, b1)) {
+                        isGood[j] = false;
+                    }
+                }
+            }
+        }
+        return isGood;
+    }
+
+
+    detectBees()  {
+        let canvas = this.frame
         let gray = new cv.Mat();
-        //let canvas = cv.imread(this.canvas_id);
-        //let canvas = this.src.clone();
         cv.cvtColor(canvas, gray, cv.COLOR_RGBA2GRAY, 0);
         let bees = new cv.RectVector();
+
         let beesCascade = new cv.CascadeClassifier();
-        // load pre-trained classifiers
         beesCascade.load(this.class_file);
-        // detect faces
+
         let minsize = new cv.Size(30, 30), maxsize = new cv.Size(200,200);
         beesCascade.detectMultiScale(gray, bees, 1.1, 3, 0, minsize, maxsize);
-        this.drawEllipses(canvas, bees);
+
+        let beeFeatures = new Array(bees.size()); 
+        for (let i = 0; i < bees.size(); i++) {
+            let b = bees.get(i);
+            beeFeatures[i] = [];
+            for (let j = 0; j < this.corner_pts.length; j++) {
+                if (this.containsPoint(b, this.corner_pts[j])) {
+                    beeFeatures[i].push(j);
+                }
+            }
+        }
+
+        const MAX_DIST_SAME = 40;
+        let isActive = new Array(bees.size());
+        isActive.fill(false);
+
+        this.activeBees.forEach((bee) => {
+            bee.valid = false;
+            let minDist = this.frame.rows + this.frame.cols, minIndex = -1;
+            for (let i = 0; i < bees.size(); i++) {
+                if (!isActive[i]) {
+                    let r = bee.currRect;
+                    let dist = Math.abs(r.x - bees.get(i).x) + Math.abs(r.y - bees.get(i).y);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        minIndex = i;
+                    }
+                }
+            }
+            if (minDist < MAX_DIST_SAME) {
+                bee.addRect(bees.get(minIndex), this.curr_frame);
+                bee.features = beeFeatures[minIndex];
+                bee.valid = true;
+                isActive[minIndex] = true;
+            }
+        });
+
+        let isGood = this.getGoodBees(bees, beeFeatures);
+
+        for (let i = 0; i < bees.size(); i++) {
+            if (!isActive[i] && isGood[i]) {
+                let b = new Bee(this.next_id++, bees.get(i), beeFeatures[i], this.curr_frame);
+                this.activeBees.push(b);
+            }
+        }
         gray.delete(); beesCascade.delete(); bees.delete();
     }
 
-    drawEllipses(mat, bees) {
-        let color = [0,255,0,255];
-        for (var i = 0; i < bees.size(); i++) {
-            var b = bees.get(i)
-            let center = new cv.Point(b.x + b.width / 2, b.y + b.height / 2);
-            let sz = new cv.Size(b.width / 2, b.height / 2);
-            cv.ellipse(mat, center, sz, 0, 0, 360, color, 4, 8, 0);
+    drawBees() {
+        let canvas = this.frame
+        for (var i = 0; i < this.activeBees.length; i++) {
+            let b = this.activeBees[i];
+            if (b.valid) {
+                var r = b.currRect;
+                let center = new cv.Point(r.x + r.width / 2, r.y + r.height / 2);
+                let sz = new cv.Size(r.width / 2, r.height / 2);
+                cv.ellipse(canvas, center, sz, 0, 0, 360, b.color, 4, 8, 0);
+                let rad = 4;
+                b.features.forEach((ft) => {
+                    if (ft >= 0) {
+                        let pt = this.corner_pts[ft];
+                        cv.circle(canvas, pt, rad, b.color, -1);
+                    }
+                });
+            }
         }
     }
 }

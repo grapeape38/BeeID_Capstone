@@ -1,5 +1,5 @@
 <template>
-  <div class="BeeCanvas">
+  <div id="BeeCanvas">
     <h1>{{ openCVReady ? "OpenCV ready" : "OpenCV not ready"}}</h1>
     <h2>Classifier: {{ class_url }}</h2>
     <div id="mediaDiv">
@@ -43,7 +43,6 @@ export default {
           this.video.play().then(() => {
               this.bee_detector.startDetect();
           });
-          this.video.play();
         }
         else {
           this.video.pause();
@@ -69,7 +68,7 @@ export default {
 <!-- Add "scoped" attribute to limit CSS to this component only -->
 <style scoped>
 #BeeCanvas {
-  max-width: 480;
+  max-width: 650px;
   margin: 0 auto 0 auto;
 }
 button, input {
