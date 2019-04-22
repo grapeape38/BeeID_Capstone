@@ -23,6 +23,7 @@ export default {
   props: {
     openCVReady: Boolean, 
     class_url: String,
+    beeList: Array 
   },
   mounted() {
       this.video = this.$refs.video;
@@ -38,7 +39,7 @@ export default {
     },
     videoPlayPause() {
         if (!this.streaming) {
-          this.bee_detector = new BeeDetect(this.video, "canvasOutput", this.class_url);
+          this.bee_detector = new BeeDetect(this.video, "canvasOutput", this.class_url, this.beeList);
           this.streaming = true;
           this.video.play().then(() => {
               this.bee_detector.startDetect();
@@ -69,7 +70,7 @@ export default {
 <style scoped>
 #BeeCanvas {
   max-width: 650px;
-  margin: 0 auto 0 auto;
+  float:left;
 }
 button, input {
   margin: 5px;

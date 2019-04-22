@@ -1,16 +1,22 @@
 <template>
   <div id="app">
-    <BeeCanvas v-on:xml_upload="uploadXML($event)" v-bind:openCVReady="openCVReady" v-bind:class_url="class_url"/>
+    <BeeCanvas v-on:xml_upload="uploadXML($event)"
+      v-bind:openCVReady="openCVReady"
+      v-bind:class_url="class_url"
+      v-bind:beeList="beeList" />
+    <BeeArchive v-bind:beeList="beeList" />
   </div>
 </template>
 
 <script>
 import BeeCanvas from './components/BeeCanvas.vue'
+import BeeArchive from './components/BeeArchive.vue'
 
 export default {
   name: 'app',
   components: {
-   BeeCanvas
+   BeeCanvas,
+   BeeArchive
   },
   mounted() {
       let xmlFile = './rpi11b.xml';
@@ -32,7 +38,7 @@ export default {
     }
   },
   data: function() {
-    return { openCVReady: false, class_url: ""}
+    return { openCVReady: false, class_url: "", beeList: []}
   }
 }
 </script>

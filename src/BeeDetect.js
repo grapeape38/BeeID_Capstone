@@ -29,12 +29,16 @@ function randInt(max) {
 }
 
 class Bee {
-    constructor(id, rect, features, frame) {
+    constructor(id, rect, features, frame_no, snapshot) {
         this.id = id;
         this.features_ = features;
         this.color_ = [randInt(255), randInt(255), randInt(255), 255]
         this.valid_ = true;
-        this.history = [{rect: rect, frame: frame}];
+        this.snapshot = snapshot;
+        this.history = [{rect: rect, frame: frame_no}];
+    }
+    destroy() {
+        this.snapshot.delete();
     }
     get valid() {
         return this.valid_;
@@ -73,13 +77,14 @@ class Bee {
 const MAX_INACTIVE_FRAMES = 10;
 const MIN_TRACK_PCT = 0.3;
 const DETECT_INTERVAL = 6;
+const MIN_ARCHIVE_FRAMES = 20;
 const FPS = 30;
 
 /*hyper parameters!*/
 
 
 class BeeDetect {
-    constructor(video, canvas_id, class_file) {
+    constructor(video, canvas_id, class_file, beeList) {
         this.canvas_id = canvas_id; 
         this.cap = new cv.VideoCapture(video);
         this.streaming = false;
@@ -87,7 +92,9 @@ class BeeDetect {
         this.frame = new cv.Mat(video.height, video.width, cv.CV_8UC4);
         this.curr_frame = 0;
         this.activeBees = new Array();
-        this.archiveBees = new Array();
+        //archiveBees.clear();
+        
+        this.beeList = beeList;
         this.next_id = 0;
 
         this.prev_frame = new cv.Mat()
@@ -148,6 +155,7 @@ class BeeDetect {
                 self.copyTrackedPoints();
             }
             self.removeOld();
+            self.storeBees();
             self.drawBees();
             cv.imshow(self.canvas_id, self.frame);
             self.curr_frame++;
@@ -162,7 +170,21 @@ class BeeDetect {
 
     removeOld() {
         this.activeBees = this.activeBees.filter((bee) => {
-            return this.curr_frame - bee.lastActiveFrame <= MAX_INACTIVE_FRAMES;
+            let keep = true;
+            if (this.curr_frame - bee.lastActiveFrame > MAX_INACTIVE_FRAMES) {
+                keep = false;
+                bee.destroy();
+            }
+            return keep;
+        });
+    }
+
+
+    storeBees() {
+        this.activeBees.forEach((bee) => {
+            if (bee.history.length == MIN_ARCHIVE_FRAMES) {
+                this.beeList.push(bee);
+            }
         });
     }
 
@@ -174,7 +196,6 @@ class BeeDetect {
             [150, 0.3, 7, 3]
         cv.cvtColor(canvas, gray, cv.COLOR_RGBA2GRAY, 0);
         cv.goodFeaturesToTrack(gray, this.corners, maxCorners, qualityLevel, minDistance, none, blockSize);
-        let r = 4;
         this.corner_pts = []
         for (let i = 0; i < this.corners.rows; i++) {
             let [x,y] = [this.corners.data32F[i*2], this.corners.data32F[i*2+1]]
@@ -319,13 +340,15 @@ class BeeDetect {
 
         let isGood = this.getGoodBees(bees, beeFeatures);
 
+        let snapshot = new cv.Mat();
         for (let i = 0; i < bees.size(); i++) {
             if (!isActive[i] && isGood[i]) {
-                let b = new Bee(this.next_id++, bees.get(i), beeFeatures[i], this.curr_frame);
+                snapshot = canvas.roi(bees.get(i));
+                let b = new Bee(this.next_id++, bees.get(i), beeFeatures[i], this.curr_frame, snapshot.clone());
                 this.activeBees.push(b);
             }
         }
-        gray.delete(); beesCascade.delete(); bees.delete();
+        gray.delete(); beesCascade.delete(); bees.delete(); snapshot.delete();
     }
 
     drawBees() {
