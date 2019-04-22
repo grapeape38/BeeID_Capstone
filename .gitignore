@@ -1,8 +1,6 @@
 .DS_Store
 node_modules
 /dist
-public/videos
-public/opencv.js
 
 # local env files
 .env.local
