@@ -1,6 +1,10 @@
 <template>
     <li>
-       <canvas width="80px" height="80px" v-bind:id="'thumb_' + bee.id"/>
+       <canvas v-on:mouseover="mouseOver" 
+               v-on:click="setFocus"
+               v-on:mouseout="mouseOut"
+               v-bind:style="styleObj"
+               width="80px" height="80px" v-bind:id="'thumb_' + bee.id"/>
     </li>
 </template>
 
@@ -12,9 +16,33 @@ export default {
     },
     mounted() {
         cv.imshow(this.canvas_id, this.bee.snapshot);
+        this.bee.destroy();
+    },
+    methods: {
+        setFocus() {
+            this.bee.setFocus();
+        },
+        mouseOver() {
+            this.styleObj.borderWidth = '4px';
+        },
+        mouseOut() {
+            this.styleObj.borderWidth = '0px';
+        }
     },
     data: function() {
-        return { canvas_id: 'thumb_' + this.bee.id };
+        return { canvas_id: 'thumb_' + this.bee.id,
+                 styleObj: {
+                     borderColor: `rgb(${this.bee.color[0]}, ${this.bee.color[1]}, ${this.bee.color[2]})`,
+                     borderStyle: 'solid',
+                     borderWidth: '0px'
+                 }
+               };
     }
 }
 </script>
+
+<style scoped>
+li:hover {
+    cursor: pointer;
+}
+</style>

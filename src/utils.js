@@ -2,6 +2,10 @@ const OPENCV_URL = 'opencv.js';
 
 class Utils { // eslint-disable-line no-unused-vars
     //    let self = this;
+    constructor() {
+        this.loadedFiles = new Set();
+    }
+
     loadOpenCv() {
         return new Promise((resolve, reject) => {
             let script = document.createElement('script');
@@ -30,6 +34,10 @@ class Utils { // eslint-disable-line no-unused-vars
 
     createFileFromUrl(path, url) {
         return new Promise((resolve, reject) => {
+            if (this.loadedFiles.has(path)) {
+                resolve();
+            }
+            this.loadedFiles.add(path);
             let request = new XMLHttpRequest();
             request.open('GET', url, true);
             request.responseType = 'arraybuffer';
@@ -49,12 +57,12 @@ class Utils { // eslint-disable-line no-unused-vars
         });
     }
 
-    createFileLocal(file) {
+    /*createFileLocal(file) {
         let data = new Uint8Array(file);
         let path = URL.createObjectURL(file);
         console.log(data, path);
         cv.FS_createDataFile('/', path, data, true, false, false);
-    }
+    }*/
 
     loadImageToCanvas(url, canvasId) {
         let canvas = document.getElementById(canvasId);

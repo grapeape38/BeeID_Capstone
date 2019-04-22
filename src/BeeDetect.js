@@ -21,24 +21,41 @@ function logErr(err) {
     console.log(err);
 }
 
-
 var self
 
 function randInt(max) {
     return Math.floor(Math.random() * (max+1));
 }
 
+function setBeeFocus(bee, BD) {
+    if (BD.streaming) {
+        BD.stopDetect();
+    }
+    BD.video.currentTime = bee.vidTime;
+    let endFocusCB = () => { 
+        BD.beeFocus = null;
+        BD.stopDetect();
+    }
+    BD.beeFocus = new BeeFocus(bee, endFocusCB);
+    BD.startDetect();
+}
+
 class Bee {
-    constructor(id, rect, features, frame_no, snapshot) {
+    constructor(id, rect, features, frame, snapshot, vidTime, setFocusCB) {
         this.id = id;
         this.features_ = features;
         this.color_ = [randInt(255), randInt(255), randInt(255), 255]
         this.valid_ = true;
         this.snapshot = snapshot;
-        this.history = [{rect: rect, frame: frame_no}];
+        this.vidTime = vidTime;
+        this.history = [{rect: rect, frame: frame}];
+        this.setFocusCB = setFocusCB;
     }
     destroy() {
         this.snapshot.delete();
+    }
+    setFocus() {
+        this.setFocusCB(this);
     }
     get valid() {
         return this.valid_;
@@ -74,34 +91,62 @@ class Bee {
     }
 }
 
+class BeeFocus {
+    constructor(bee, callback) {
+        this.bee_ = bee; 
+        this.callback = callback;
+        this.curr_frame = bee.history[0].frame;
+        this.last_frame = bee.lastActiveFrame;
+        this.hist_index = 0;
+        this.bee_.history.push(this.bee_.history[0]);
+    }
+    get bee() {
+        return this.bee_;
+    }
+    reset() {
+        this.bee_.history.pop();
+        this.callback();
+    }
+    nextFrame() {
+        this.curr_frame++;
+        if (this.curr_frame === this.last_frame)
+            return false;
+        if (this.curr_frame === this.bee_.history[this.hist_index + 1].frame) {
+            this.bee_.history[this.bee_.history.length - 1] = this.bee_.history[this.hist_index++];
+        }
+        return true;
+    }
+}
+
 const MAX_INACTIVE_FRAMES = 10;
 const MIN_TRACK_PCT = 0.3;
 const DETECT_INTERVAL = 6;
-const MIN_ARCHIVE_FRAMES = 20;
+const MIN_ARCHIVE_FRAMES = 40;
 const FPS = 30;
 
 /*hyper parameters!*/
 
-
 class BeeDetect {
-    constructor(video, canvas_id, class_file, beeList) {
+    constructor(video, canvas_id, class_file, addBee)  {
         this.canvas_id = canvas_id; 
+        this.video = video;
         this.cap = new cv.VideoCapture(video);
         this.streaming = false;
         this.class_file = class_file;
-        this.frame = new cv.Mat(video.height, video.width, cv.CV_8UC4);
+        this.frame = null; 
         this.curr_frame = 0;
         this.activeBees = new Array();
-        //archiveBees.clear();
         
-        this.beeList = beeList;
+        this.addBee = addBee; 
+        this.savedBees = new Set();
+        this.beeFocus = null;
         this.next_id = 0;
 
-        this.prev_frame = new cv.Mat()
-        this.corners = new cv.Mat();
-        this.status = new cv.Mat();
-        this.err = new cv.Mat();
-        this.track = new cv.Mat();
+        this.prev_frame = null;
+        this.corners = null;
+        this.status = null;
+        this.err = null;
+        this.track = null;
 
         this.corner_pts = new Array(); 
         this.track_pts = new Array();
@@ -120,11 +165,22 @@ class BeeDetect {
 
     startDetect() {
         this.streaming = true;
-        setTimeout(this.processFrame, 0);
+        this.frame = new cv.Mat(this.video.height, this.video.width, cv.CV_8UC4);
+        this.prev_frame = new cv.Mat()
+        this.corners = new cv.Mat();
+        this.status = new cv.Mat();
+        this.err = new cv.Mat();
+        this.track = new cv.Mat();
+        this.video.play().then(() => {
+            setTimeout(this.processFrame, 0);
+        });
     }
 
     stopDetect() {
+        this.video.pause();
+        this.video.currentTime = 0;
         this.streaming = false;
+        this.destroy();
     }
 
     copyTrackedPoints() {
@@ -140,26 +196,34 @@ class BeeDetect {
     processFrame() {
         try {
             if (!self.streaming) {
-                self.destroy();
                 return;
             }
             let begin = Date.now();
             self.cap.read(self.frame);
-            if (!self.corners.rows || !(self.curr_frame % DETECT_INTERVAL)) {
-                self.getFeatures();
-                self.detectBees();
+            if (self.beeFocus !== null) {
+                self.drawOneBee(self.beeFocus.bee);
+                cv.imshow(self.canvas_id, self.frame);
+                if (!self.beeFocus.nextFrame()) {
+                    self.beeFocus.reset();
+                }
             }
             else {
-                self.getOptFlow();
-                self.trackBees();
-                self.copyTrackedPoints();
+                if (!self.corners.rows || !(self.curr_frame % DETECT_INTERVAL)) {
+                    self.getFeatures();
+                    self.detectBees();
+                }
+                else {
+                    self.getOptFlow();
+                    self.trackBees();
+                    self.copyTrackedPoints();
+                }
+                self.removeOld();
+                self.storeBees();
+                self.drawBees();
+                self.curr_frame++;
+                self.frame.copyTo(self.prev_frame);
+                cv.imshow(self.canvas_id, self.frame);
             }
-            self.removeOld();
-            self.storeBees();
-            self.drawBees();
-            cv.imshow(self.canvas_id, self.frame);
-            self.curr_frame++;
-            self.frame.copyTo(self.prev_frame);
             let delay = 1000 / FPS - (Date.now() - begin);
             setTimeout(self.processFrame, delay);
         }
@@ -169,21 +233,17 @@ class BeeDetect {
     }
 
     removeOld() {
-        this.activeBees = this.activeBees.filter((bee) => {
-            let keep = true;
-            if (this.curr_frame - bee.lastActiveFrame > MAX_INACTIVE_FRAMES) {
-                keep = false;
-                bee.destroy();
-            }
-            return keep;
-        });
+        this.activeBees = this.activeBees.filter((bee) => 
+            this.curr_frame - bee.lastActiveFrame <= MAX_INACTIVE_FRAMES
+        );
     }
 
 
     storeBees() {
         this.activeBees.forEach((bee) => {
-            if (bee.history.length == MIN_ARCHIVE_FRAMES) {
-                this.beeList.push(bee);
+            if (bee.history.length == MIN_ARCHIVE_FRAMES && !this.savedBees.has(bee.id)) {
+                this.addBee(bee);
+                this.savedBees.add(bee.id);
             }
         });
     }
@@ -239,39 +299,54 @@ class BeeDetect {
     }
 
     trackBees() {
-        this.activeBees.forEach((b) => {
+        this.activeBees.forEach(b => {
             if (!b.valid) return;
-            let num_tracked = 0, tot_pts = 0;
             let avg_x_offset = 0.0, avg_y_offset = 0.0;
-            b.features.forEach((idx, i) => {
-                if (idx >= 0 && this.status.data[idx]) {
-                    num_tracked++;
-                    let newPt = this.track_pts[this.point_map[idx]];
-                    avg_x_offset += newPt.x - this.corner_pts[idx].x;
-                    avg_y_offset += newPt.y - this.corner_pts[idx].y;
-                }
-                if (idx >= 0) tot_pts++;
-                b.features[i] = this.point_map[idx];
-            });
+            let tot_pts = b.features.length;
+            let tracked_fts = b.features.filter(idx => this.status.data[idx] === 1);
+            let num_tracked = tracked_fts.length; 
+            let old_pts = tracked_fts.map(idx => this.corner_pts[idx]);
+            b.features = tracked_fts.map(idx => this.point_map[idx])
+            let new_pts = b.features.map(idx => this.track_pts[idx]);
+            for (let i = 0; i < num_tracked; i++) {
+                avg_x_offset += new_pts[i].x - old_pts[i].x; 
+                avg_y_offset += new_pts[i].y - old_pts[i].y;
+            }
             if (tot_pts == 0 || num_tracked / tot_pts < MIN_TRACK_PCT) {
                 b.valid = false;
             }
             else {
                 avg_x_offset /= num_tracked;
                 avg_y_offset /= num_tracked;
-                //console.log(avg_x_offset, avg_y_offset);
                 b.adjustRect(avg_x_offset, avg_y_offset, this.curr_frame);
             }
         });
     }
 
+    //filter bees that contain other bees and are too big / small compared to avg (1.5 SD)
     getGoodBees(bees, beeFeatures) {
         let isGood = new Array(bees.size())
-        //filter bees that contain other bees
+        //*let tot_area = 0.0, n_bees = 0;
         for (let i = 0; i < bees.size(); i++) {
             isGood[i] = beeFeatures.length > 0;
+         /*   if (isGood[i]) {
+                tot_area += bees[i].width * bees[i].height;
+                n_bees++;
+            }*/
         }
+        //if (!n_bees) return isGood;
+        /*let avg_area = tot_area / n_bees;
+        let area_sd = 0.0;
+        for (let i = 0; i < bees.size(); i++) {
+            if (isGood[i]) {
+                let area = bees[i].width * bees[i].height;
+                area_sd += (area - avg_area)*(area - avg_area);
+            }
+        }
+        area_sd = Math.sqrt(area_sd / n_bees);*/
         for (let i = 0; i < bees.size() - 1; i++) {
+            //let area = bees[i].width * bees[i].height;
+            //isGood[i] &= Math.abs(area - avg_area) <= 1.5 * area_sd;
             if (isGood[i]) {
                 let b1 = bees.get(i);
                 for (let j = i+1; j < bees.size(); j++) {
@@ -288,7 +363,6 @@ class BeeDetect {
         }
         return isGood;
     }
-
 
     detectBees()  {
         let canvas = this.frame
@@ -344,29 +418,37 @@ class BeeDetect {
         for (let i = 0; i < bees.size(); i++) {
             if (!isActive[i] && isGood[i]) {
                 snapshot = canvas.roi(bees.get(i));
-                let b = new Bee(this.next_id++, bees.get(i), beeFeatures[i], this.curr_frame, snapshot.clone());
+                let setFocusCB = (bee) => {
+                    setBeeFocus(bee, this);
+                };
+                let b = new Bee(this.next_id++, bees.get(i), beeFeatures[i], this.curr_frame, snapshot.clone(),
+                                this.video.currentTime, setFocusCB);
                 this.activeBees.push(b);
             }
         }
         gray.delete(); beesCascade.delete(); bees.delete(); snapshot.delete();
     }
 
-    drawBees() {
+    drawOneBee(b) {
         let canvas = this.frame
+        var r = b.currRect;
+        let center = new cv.Point(r.x + r.width / 2, r.y + r.height / 2);
+        let sz = new cv.Size(r.width / 2, r.height / 2);
+        cv.ellipse(canvas, center, sz, 0, 0, 360, b.color, 4, 8, 0);
+        if (this.beeFocus === null) {
+            let rad = 4;
+            b.features.forEach((ft) => {
+                let pt = this.corner_pts[ft];
+                cv.circle(canvas, pt, rad, b.color, -1);
+            });
+        }
+    }
+
+    drawBees() {
         for (var i = 0; i < this.activeBees.length; i++) {
             let b = this.activeBees[i];
             if (b.valid) {
-                var r = b.currRect;
-                let center = new cv.Point(r.x + r.width / 2, r.y + r.height / 2);
-                let sz = new cv.Size(r.width / 2, r.height / 2);
-                cv.ellipse(canvas, center, sz, 0, 0, 360, b.color, 4, 8, 0);
-                let rad = 4;
-                b.features.forEach((ft) => {
-                    if (ft >= 0) {
-                        let pt = this.corner_pts[ft];
-                        cv.circle(canvas, pt, rad, b.color, -1);
-                    }
-                });
+                this.drawOneBee(b);
             }
         }
     }

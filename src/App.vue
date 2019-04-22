@@ -1,9 +1,17 @@
 <template>
   <div id="app">
-    <BeeCanvas v-on:xml_upload="uploadXML($event)"
-      v-bind:openCVReady="openCVReady"
-      v-bind:class_url="class_url"
-      v-bind:beeList="beeList" />
+    <h1>BeeID</h1>
+    <h3>Made as part of the <a href="http://cs.appstate.edu:8080/">Beemon Project</a></h3>
+    <VideoSelect
+      v-bind:videoList="videoList"
+      v-on:loadVideo="loadVideo($event)"/>
+    <BeeCanvas
+      v-on:xml_upload="uploadXML($event)"
+      v-on:switchXML="switchXML($event)"
+      v-bind:vidURL="vidURL"
+      v-bind:status="status"
+      v-bind:beeList="beeList"
+      v-on:clearBees="clearBees"/>
     <BeeArchive v-bind:beeList="beeList" />
   </div>
 </template>
@@ -11,34 +19,56 @@
 <script>
 import BeeCanvas from './components/BeeCanvas.vue'
 import BeeArchive from './components/BeeArchive.vue'
+import VideoSelect from './components/VideoSelect.vue'
 
 export default {
   name: 'app',
   components: {
    BeeCanvas,
-   BeeArchive
+   BeeArchive,
+   VideoSelect
   },
   mounted() {
-      let xmlFile = './rpi11b.xml';
+      let xmlFile = 'rpi11b.xml';
+      let url = 'classifiers/' + xmlFile;
       this.$utils.loadOpenCv()
         .then(() => {
-          this.$utils.createFileFromUrl(xmlFile, xmlFile);
-          this.openCVReady = true;
+          this.$utils.createFileFromUrl(xmlFile, url);
+          this.status = "XML Loading...";
       }).then(() => {
-          this.class_url = xmlFile;
+          this.status = "Ready";
       })
-    },
+      fetch('/getVideos').then((resp) => {
+        return resp.json();
+      }).then((json) => {this.videoList = json.videos})
+        .catch(console.log("Error fetching videos"))
+  },
   methods: {
+    loadVideo(vidURL) {
+      this.clearBees();
+      this.vidURL = vidURL;
+    },
     uploadXML(e) {
       let xmlFile = e.target.files[0];
       let url = URL.createObjectURL(xmlFile);
+      this.status = "XML Loading..."
       this.$utils.createFileFromUrl(xmlFile.name, url).then(() => {
-        this.class_url = xmlFile.name;
+        this.status = "Ready";
       });
+    },
+    switchXML(class_url) {
+      this.status = "XML Loading..."
+      let url = '/classifiers/' + class_url;
+      this.$utils.createFileFromUrl(class_url, url).then(() => {
+        this.status = "Ready";
+      })
+    },
+    clearBees() {
+      this.beeList = [];
     }
   },
   data: function() {
-    return { openCVReady: false, class_url: "", beeList: []}
+    return { status: "OpenCV Loading...", vidURL: "", videoList: [], beeList: []}
   }
 }
 </script>
@@ -50,6 +80,7 @@ export default {
   -moz-osx-font-smoothing: grayscale;
   text-align: center;
   color: #2c3e50;
-  margin-top: 60px;
+  margin: 0 auto 0 auto;
+  width: 80%;
 }
 </style>
