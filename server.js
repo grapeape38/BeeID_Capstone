@@ -12,11 +12,10 @@ app.get("/", (req, res) => {
 });
 
 app.get("/getVideos", (req, res) => {
-  videos = []
-  fs.readdir('/videos', (error, files) => {
+  fs.readdir(builddir + '/videos', (error, files) => {
     if (error) throw error;
     let next_id = 1;
-    videos = files.map(file => ({id: next_id++, url: 'videos/' + file, name: file, thumb: 'thumb/' + file.split('.')[0] + '.png'}));
+    let videos = files.map(file => ({id: next_id++, url: 'videos/' + file, name: file, thumb: 'thumb/' + file.split('.')[0] + '.png'}));
     res.status(200).json(
       { videos: videos }
     );
