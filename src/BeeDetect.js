@@ -27,22 +27,6 @@ function randInt(max) {
     return Math.floor(Math.random() * (max+1));
 }
 
-function setBeeFocus(bee, BD) {
-    if (BD.beeFocus !== null) return;
-    let currTime = BD.video.currentTime;
-    let endFocusCB = !BD.streaming ? () => { 
-        BD.stopDetect();
-    } : () => {
-        BD.beeFocus = null;
-        BD.video.currentTime = currTime; 
-    };
-    BD.beeFocus = new BeeFocus(bee, endFocusCB);
-    BD.video.currentTime = bee.vidTime;
-    if (!BD.streaming) {
-        BD.startDetect();
-    }
-}
-
 class Bee {
     constructor(id, rect, features, frame, snapshot, vidTime, setFocusCB) {
         this.id = id;
@@ -368,6 +352,22 @@ class BeeDetect {
         return isGood;
     }
 
+    setBeeFocus(bee) {
+        if (this.beeFocus !== null) return;
+        let currTime = this.video.currentTime;
+        let endFocusCB = !this.streaming ? () => { 
+            this.stopDetect();
+        } : () => {
+            this.beeFocus = null;
+            this.video.currentTime = currTime; 
+        };
+        this.beeFocus = new BeeFocus(bee, endFocusCB);
+        this.video.currentTime = bee.vidTime;
+        if (!this.streaming) {
+            this.startDetect();
+        }
+    }
+
     detectBees()  {
         let canvas = this.frame
         let gray = new cv.Mat();
@@ -423,10 +423,10 @@ class BeeDetect {
             if (!isActive[i] && isGood[i]) {
                 snapshot = canvas.roi(bees.get(i));
                 let setFocusCB = (bee) => {
-                    setBeeFocus(bee, this);
+                    this.setBeeFocus(bee);
                 };
                 let b = new Bee(this.next_id++, bees.get(i), beeFeatures[i], this.curr_frame, snapshot.clone(),
-                                this.video.currentTime, setFocusCB);
+                                this.video.currentTime, setFocusCB.bind(this));
                 this.activeBees.push(b);
             }
         }
