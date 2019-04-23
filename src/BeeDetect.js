@@ -28,16 +28,19 @@ function randInt(max) {
 }
 
 function setBeeFocus(bee, BD) {
-    if (BD.streaming) {
+    if (BD.beeFocus !== null) return;
+    let currTime = BD.video.currentTime;
+    let endFocusCB = !BD.streaming ? () => { 
         BD.stopDetect();
-    }
-    BD.video.currentTime = bee.vidTime;
-    let endFocusCB = () => { 
+    } : () => {
         BD.beeFocus = null;
-        BD.stopDetect();
-    }
+        BD.video.currentTime = currTime; 
+    };
     BD.beeFocus = new BeeFocus(bee, endFocusCB);
-    BD.startDetect();
+    BD.video.currentTime = bee.vidTime;
+    if (!BD.streaming) {
+        BD.startDetect();
+    }
 }
 
 class Bee {
@@ -179,6 +182,7 @@ class BeeDetect {
     stopDetect() {
         this.video.pause();
         this.video.currentTime = 0;
+        this.beeFocus = null;
         this.streaming = false;
         this.destroy();
     }

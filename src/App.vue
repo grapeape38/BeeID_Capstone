@@ -1,7 +1,10 @@
 <template>
   <div id="app">
-    <h1>BeeID</h1>
+    <h2>BeeID</h2>
+    <div>
     <h3>Made as part of the <a href="http://cs.appstate.edu:8080/">Beemon Project</a></h3>
+    <a href="https://github.com/grapeape38/BeeID_Capstone"><img src="GitHub-Mark-32px.png"/></a>
+    </div>
     <VideoSelect
       v-bind:videoList="videoList"
       v-on:loadVideo="loadVideo($event)"/>

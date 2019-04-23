@@ -6,12 +6,17 @@
       <option v-for="xml in xmlList" v-bind:key="xml">{{xml}}</option>
     </select>
     <div id="mediaDiv">
-      <label>Video source</label>
+      <label>Video source: </label>
       <input type="file" id="videoUp" name="file" @change="handleFileChange($event)"/>
-      <video v-bind:class="{ inactive: streaming }" v-bind:src="vidSrc" id="videoInput" ref="video" width="640" height="480" @change="resizeVideo" muted></video>
+      <label v-if="!streaming">Go: </label>
+      <span id="playDiv" v-if="status==='Ready'" v-on:click="videoPlayPause">
+        <i v-if="!streaming" class="fa fa-play fa-2x"></i>
+        <i v-else class="fa fa-stop fa-2x"></i>
+      </span>
+      <video v-bind:class="{ inactive: streaming }" v-bind:src="vidSrc" v-on:ended="videoEnd" id="videoInput" ref="video" width="640" height="480" @change="resizeVideo" muted></video>
       <canvas v-bind:class="{ inactive: !streaming }" id="canvasOutput"></canvas>
     </div>
-    <button v-if="status==='Ready'" v-on:click="videoPlayPause" v-on:ended="videoEnd">{{!streaming ? "Start Detection" : "Stop Video"}}</button>
+    <!--<button v-if="status==='Ready'" v-on:click="videoPlayPause" v-on:ended="videoEnd">{{!streaming ? "Start Detection" : "Stop Video"}}</button>-->
     <!--<div>
       <label>Upload different XML Classifier</label>
       <input type="file" id="xmlInput" name="xml" @change="$emit('xml_upload', $event)"/>
@@ -90,6 +95,12 @@ export default {
 }
 button, input {
   margin: 5px;
+}
+#playDiv:hover {
+  cursor: pointer;
+}
+#playDiv {
+  margin-left: 5px;
 }
 .inactive {
   display: none;
