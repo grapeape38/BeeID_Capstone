@@ -1,29 +1,6 @@
-# app
+Part of the Beemon project.
 
-## Project setup
-```
-npm install
-```
+Using OpenCV.js's Haar Cascade Classifiers to crudely detect bees and track them, somewhat.
 
-### Compiles and hot-reloads for development
-```
-npm run serve
-```
-
-### Compiles and minifies for production
-```
-npm run build
-```
-
-### Run your tests
-```
-npm run test
-```
-
-### Lints and fixes files
-```
-npm run lint
-```
-
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+demo:
+http://beeidcapstone.herokuapp.com
