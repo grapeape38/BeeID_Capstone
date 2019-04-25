@@ -38,6 +38,7 @@ export default {
   },
   methods: {
     handleFileChange(e) {
+      this.videoEnd();
       this.vidSrc = URL.createObjectURL(e.target.files[0]);
     },
     switchXML() {
@@ -61,11 +62,14 @@ export default {
         }
     },
     videoEnd() {
-      this.bee_detector.stopDetect();
+      if (this.bee_detector) {
+        this.bee_detector.stopDetect();
+      }
     }
   },
   watch: {
     vidURL: function(newVal, oldVal) {
+      this.videoEnd();
       this.vidSrc = newVal;
     }
   },
@@ -78,7 +82,7 @@ export default {
     return {
       video: null,
       //vidSrc: "videos/rpi12b@2018-06-17@11-10-33.mp4",
-      vidSrc: "videos/rpi12b_2018-07-15@11-45-49.mp4",
+      vidSrc: "videos/rpi12b_2018-07-15_11-45-49.mp4",
       class_url: "rpi11b.xml",
       xmlList: ["rpi11b.xml", "rpi12b.xml", "rpi24.xml", "class2.xml","class3.xml"],
       bee_detector : null,

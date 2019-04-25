@@ -99,7 +99,7 @@ class BeeFocus {
         if (this.curr_frame === this.last_frame)
             return false;
         if (this.curr_frame === this.bee_.history[this.hist_index + 1].frame) {
-            this.bee_.history[this.bee_.history.length - 1] = this.bee_.history[this.hist_index++];
+            this.bee_.history[this.bee_.history.length - 1] = this.bee_.history[++this.hist_index];
         }
         return true;
     }
@@ -109,9 +109,34 @@ const MAX_INACTIVE_FRAMES = 10;
 const MIN_TRACK_PCT = 0.3;
 const DETECT_INTERVAL = 6;
 const MIN_ARCHIVE_FRAMES = 40;
+const MAX_DIST_SAME = 40;
 const FPS = 30;
 
-/*hyper parameters!*/
+class HyperParams {
+    constructor() {
+        this.MAX_INACTIVE_FRAMES = 10;
+        this.MIN_TRACK_PCT = 0.3;
+        this.DETECT_INTERVAL = 6;
+        this.MIN_ARCHIVE_FRAMES = 40;
+        this.MAX_DIST_SAME = 40;
+
+        this.cascade = {
+            minsize: new cv.Size(30, 30),
+            maxsize:  new cv.Size(200,200)
+        };
+        this.featureDetector = {
+            maxCorners: 150, 
+            qualityLevel: 0.3,
+            minDistance: 7,
+            blockSize: 3
+        };
+        this.optFlow = {
+            winSize: new cv.Size(15,15),
+            maxLevel: 2,
+            criteria: new cv.TermCriteria(cv.TERM_CRITERIA_EPS | cv.TERM_CRITERIA_COUNT, 10, 0.03)
+        }
+    }
+}
 
 class BeeDetect {
     constructor(video, canvas_id, class_file, addBee)  {
@@ -138,6 +163,8 @@ class BeeDetect {
         this.corner_pts = new Array(); 
         this.track_pts = new Array();
         this.point_map = new Array();
+        
+        this.frameLag = 0.0;
         self = this;
     }
     
@@ -148,6 +175,7 @@ class BeeDetect {
         this.status.delete();
         this.err.delete();
         this.track.delete();
+        this.beesCascade.delete();
     }
 
     startDetect() {
@@ -158,6 +186,9 @@ class BeeDetect {
         this.status = new cv.Mat();
         this.err = new cv.Mat();
         this.track = new cv.Mat();
+        this.beesCascade = new cv.CascadeClassifier();
+        this.beesCascade.load(this.class_file);
+        this.frameLag = 0.0;
         this.video.play().then(() => {
             setTimeout(this.processFrame, 0);
         });
@@ -213,6 +244,7 @@ class BeeDetect {
                 cv.imshow(self.canvas_id, self.frame);
             }
             let delay = 1000 / FPS - (Date.now() - begin);
+            self.frameLag += Math.max(0, -delay);
             setTimeout(self.processFrame, delay);
         }
         catch(err) {
@@ -230,6 +262,7 @@ class BeeDetect {
     storeBees() {
         this.activeBees.forEach((bee) => {
             if (bee.history.length == MIN_ARCHIVE_FRAMES && !this.savedBees.has(bee.id)) {
+                //console.log(this.frameLag / 1000);
                 this.addBee(bee);
                 this.savedBees.add(bee.id);
             }
@@ -363,6 +396,7 @@ class BeeDetect {
         };
         this.beeFocus = new BeeFocus(bee, endFocusCB);
         this.video.currentTime = bee.vidTime;
+        //console.log(bee.vidTime, bee.history[0].frame / FPS, this.frameLag);
         if (!this.streaming) {
             this.startDetect();
         }
@@ -374,11 +408,11 @@ class BeeDetect {
         cv.cvtColor(canvas, gray, cv.COLOR_RGBA2GRAY, 0);
         let bees = new cv.RectVector();
 
-        let beesCascade = new cv.CascadeClassifier();
-        beesCascade.load(this.class_file);
+        /*let beesCascade = new cv.CascadeClassifier();
+        beesCascade.load(this.class_file);*/
 
         let minsize = new cv.Size(30, 30), maxsize = new cv.Size(200,200);
-        beesCascade.detectMultiScale(gray, bees, 1.1, 3, 0, minsize, maxsize);
+        this.beesCascade.detectMultiScale(gray, bees, 1.1, 3, 0, minsize, maxsize);
 
         let beeFeatures = new Array(bees.size()); 
         for (let i = 0; i < bees.size(); i++) {
@@ -391,7 +425,6 @@ class BeeDetect {
             }
         }
 
-        const MAX_DIST_SAME = 40;
         let isActive = new Array(bees.size());
         isActive.fill(false);
 
@@ -430,7 +463,7 @@ class BeeDetect {
                 this.activeBees.push(b);
             }
         }
-        gray.delete(); beesCascade.delete(); bees.delete(); snapshot.delete();
+        gray.delete(); /*beesCascade.delete();*/ bees.delete(); snapshot.delete();
     }
 
     drawOneBee(b) {

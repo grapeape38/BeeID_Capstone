@@ -33,10 +33,10 @@ export default {
 </script>
 
 <style>
-#videoSelect {
+/*#videoSelect {
     width: 20%;
     float:left;
-}
+}*/
 #videoGrid {
     display:grid;
     grid-template-columns: 1fr 1fr;
