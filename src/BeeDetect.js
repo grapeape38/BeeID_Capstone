@@ -35,7 +35,8 @@ class Bee {
         this.valid_ = true;
         this.snapshot = snapshot;
         this.vidTime = vidTime;
-        this.history = [{rect: rect, frame: frame, time: vidTime}];
+        this.lastFrame = frame;
+        this.history = [{rect: rect, time: vidTime}];
         this.setFocusCB = setFocusCB;
     }
     destroy() {
@@ -63,14 +64,16 @@ class Bee {
         return this.history[this.history.length - 1].rect;
     }
     get lastActiveFrame() {
-        return this.history[this.history.length - 1].frame;
+        return this.lastFrame; 
     }
     addRect(rect, frame, time) {
-        this.history.push({rect: rect, frame: frame, time: time});
+        this.lastFrame = frame;
+        this.history.push({rect: rect, time: time});
     }
     adjustRect(x_off, y_off, frame, time) {
         let r = this.currRect;
         let r2 = new cv.Rect(r.x+x_off, r.y+y_off, r.width, r.height);
+        this.lastFrame = frame;
         this.addRect(r2, frame, time);
     }
     contains(pt) {
@@ -82,8 +85,6 @@ class BeeFocus {
     constructor(bee, callback) {
         this.bee_ = bee; 
         this.callback = callback;
-        this.curr_frame = bee.history[0].frame;
-        this.last_frame = bee.lastActiveFrame;
         this.last_time = this.bee.history[this.bee.history.length - 1].time; 
         this.hist_index = 0;
         this.bee_.history.push(this.bee_.history[0]);
