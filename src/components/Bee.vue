@@ -4,7 +4,7 @@
                v-on:click="setFocus"
                v-on:mouseout="mouseOut"
                v-bind:style="styleObj"
-               width="80px" height="80px" v-bind:id="'thumb_' + bee.id"/>
+               width="80px" height="80px" v-bind:id="'bee_img_' + bee.id"/>
     </li>
 </template>
 
@@ -30,7 +30,7 @@ export default {
         }
     },
     data: function() {
-        return { canvas_id: 'thumb_' + this.bee.id,
+        return { canvas_id: 'bee_img_' + this.bee.id,
                  styleObj: {
                      borderColor: `rgb(${this.bee.color[0]}, ${this.bee.color[1]}, ${this.bee.color[2]})`,
                      borderStyle: 'solid',

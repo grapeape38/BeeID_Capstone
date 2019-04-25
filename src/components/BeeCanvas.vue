@@ -42,6 +42,7 @@ export default {
       this.vidSrc = URL.createObjectURL(e.target.files[0]);
     },
     switchXML() {
+      this.videoEnd();
       this.class_url = this.$refs.xmlSelect.value;
       this.$emit('switchXML', this.class_url)
     },

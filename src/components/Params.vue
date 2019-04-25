@@ -56,17 +56,15 @@ this.optFlow = {
     criteria: new cv.TermCriteria(cv.TERM_CRITERIA_EPS | cv.TERM_CRITERIA_COUNT, 10, 0.03)
 }
 */
-import HyperParams from '../BeeDetect';
 export default {
     name: 'Params',
     props: {
         params: Object 
     },
-    setParam(key, value) {
-        this.$emit('setParam', {key, value});
-    },
-    data: function() {
-        return { myParams: new HyperParams() };
+    methods: {
+        updateParams: function(value) {
+            this.$emit('input', value);
+        },
     }
 }
 </script>

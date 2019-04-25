@@ -9,7 +9,7 @@
       <VideoSelect
         v-bind:videoList="videoList"
         v-on:loadVideo="loadVideo($event)"/>
-      <!--<Params v-bind:params="params"/>-->
+      <!--<Params v-model="params"/>-->
     </div>
     <BeeCanvas
       v-on:xml_upload="uploadXML($event)"
@@ -18,7 +18,8 @@
       v-bind:status="status"
       v-bind:beeList="beeList"
       v-on:clearBees="clearBees"/>
-    <BeeArchive v-bind:beeList="beeList" />
+    <BeeArchive
+      v-bind:beeList="beeList"/>
   </div>
 </template>
 
@@ -71,9 +72,20 @@ export default {
         this.status = "Ready";
       })
     },
-    setParam(key, val) {
-      this.params.key = val;
-    },
+    /*downloadBees() {
+      if (!this.beeList.length) return;
+      let zip = new AdmZip(this.vidURL + ".zip");
+      this.beeList.forEach(b => {
+        let canvas_id = "bee_img_" + b.id;
+        let canvas = document.getElementById(canvas_id)
+        if (canvas !== undefined) {
+          let ctx = canvas.getContext("2d");
+          let img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          zip.addFile(canvas_id, img.data.buffer, canvas_id);
+        }
+      });
+      console.log(zip.getEntries());
+    },*/
     clearBees() {
       this.beeList = [];
     }
