@@ -94,13 +94,17 @@ class BeeFocus {
         this.bee_.history.pop();
         this.callback();
     }
+    isVisible() {
+        return this.curr_frame === this.bee_.history[this.hist_index].frame;
+    }
     nextFrame() {
-        this.curr_frame++;
-        if (this.curr_frame === this.last_frame)
+        if (this.curr_frame == this.last_frame) {
             return false;
-        if (this.curr_frame === this.bee_.history[this.hist_index + 1].frame) {
-            this.bee_.history[this.bee_.history.length - 1] = this.bee_.history[++this.hist_index];
         }
+        if (this.isVisible()) {
+            this.bee_.history[this.bee_.history.length - 1] = this.bee_.history[this.hist_index++];
+        }
+        this.curr_frame++;
         return true;
     }
 }
@@ -110,7 +114,7 @@ const MIN_TRACK_PCT = 0.3;
 const DETECT_INTERVAL = 6;
 const MIN_ARCHIVE_FRAMES = 40;
 const MAX_DIST_SAME = 40;
-const FPS = 30;
+const FPS = 30.0;
 
 class HyperParams {
     constructor() {
@@ -220,7 +224,9 @@ class BeeDetect {
             let begin = Date.now();
             self.cap.read(self.frame);
             if (self.beeFocus !== null) {
-                self.drawOneBee(self.beeFocus.bee);
+                if (self.beeFocus.isVisible()) {
+                    self.drawOneBee(self.beeFocus.bee);
+                }
                 cv.imshow(self.canvas_id, self.frame);
                 if (!self.beeFocus.nextFrame()) {
                     self.beeFocus.reset();
@@ -396,6 +402,7 @@ class BeeDetect {
         };
         this.beeFocus = new BeeFocus(bee, endFocusCB);
         this.video.currentTime = bee.vidTime;
+        //this.video.currentTime = bee.history[0].frame / FPS; 
         //console.log(bee.vidTime, bee.history[0].frame / FPS, this.frameLag);
         if (!this.streaming) {
             this.startDetect();
