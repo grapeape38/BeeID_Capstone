@@ -73,7 +73,6 @@ class Bee {
     adjustRect(x_off, y_off, frame, time) {
         let r = this.currRect;
         let r2 = new cv.Rect(r.x+x_off, r.y+y_off, r.width, r.height);
-        this.lastFrame = frame;
         this.addRect(r2, frame, time);
     }
     contains(pt) {
@@ -248,7 +247,6 @@ class BeeDetect {
                 cv.imshow(self.canvas_id, self.frame);
             }
             let delay = 1000 / FPS - (Date.now() - begin);
-            self.frameLag += Math.max(0, -delay);
             setTimeout(self.processFrame, delay);
         }
         catch(err) {
@@ -261,7 +259,6 @@ class BeeDetect {
             this.curr_frame - bee.lastActiveFrame <= MAX_INACTIVE_FRAMES
         );
     }
-
 
     storeBees() {
         this.activeBees.forEach((bee) => {
@@ -313,6 +310,7 @@ class BeeDetect {
     }
 
     containsOtherRect(r1, r2) {
+        if (r1 == r2) return false;
         let p1 = new cv.Point(r2.x, r2.y);
         return this.containsPoint(r1, p1) && r1.x + r1.width >= r2.x + r2.width &&
             r1.y + r1.height >= r2.y + r2.height;
@@ -326,6 +324,7 @@ class BeeDetect {
         let time = this.video.currentTime;
         this.activeBees.forEach(b => {
             if (!b.valid) return;
+            b.valid = false;
             let avg_x_offset = 0.0, avg_y_offset = 0.0;
             let tot_pts = b.features.length;
             let tracked_fts = b.features.filter(idx => this.status.data[idx] === 1);
@@ -337,56 +336,19 @@ class BeeDetect {
                 avg_x_offset += new_pts[i].x - old_pts[i].x; 
                 avg_y_offset += new_pts[i].y - old_pts[i].y;
             }
-            if (tot_pts == 0 || num_tracked / tot_pts < MIN_TRACK_PCT) {
-                b.valid = false;
-            }
-            else {
+            if (tot_pts > 0 && num_tracked / tot_pts >= MIN_TRACK_PCT) {
                 avg_x_offset /= num_tracked;
                 avg_y_offset /= num_tracked;
                 b.adjustRect(avg_x_offset, avg_y_offset, this.curr_frame, time);
+                b.valid = true;
             }
         });
     }
 
-    //filter bees that contain other bees and are too big / small compared to avg (1.5 SD)
-    getGoodBees(bees, beeFeatures) {
-        let isGood = new Array(bees.size())
-        //let tot_area = 0.0, n_bees = 0;
-        for (let i = 0; i < bees.size(); i++) {
-            isGood[i] = beeFeatures.length > 0;
-         /*   if (isGood[i]) {
-                tot_area += bees[i].width * bees[i].height;
-                n_bees++;
-            }*/
-        }
-        /*if (!n_bees) return isGood;
-        let avg_area = tot_area / n_bees;
-        let area_sd = 0.0;
-        for (let i = 0; i < bees.size(); i++) {
-            if (isGood[i]) {
-                let area = bees[i].width * bees[i].height;
-                area_sd += (area - avg_area)*(area - avg_area);
-            }
-        }
-        area_sd = Math.sqrt(area_sd / n_bees);*/
-        for (let i = 0; i < bees.size() - 1; i++) {
-            /*let area = bees[i].width * bees[i].height;
-            isGood[i] &= Math.abs(area - avg_area) <= 1.5 * area_sd;*/
-            if (isGood[i]) {
-                let b1 = bees.get(i);
-                for (let j = i+1; j < bees.size(); j++) {
-                    let b2 = bees.get(j);
-                    if (this.containsOtherRect(b1, b2)) {
-                        isGood[i] = false;
-                        break;
-                    }
-                    if (this.containsOtherRect(b2, b1)) {
-                        isGood[j] = false;
-                    }
-                }
-            }
-        }
-        return isGood;
+    getGoodBees(bees) {
+        return bees.filter(b1 => 
+            !bees.some(b2 => this.containsOtherRect(b1.rect, b2.rect))
+        );
     }
 
     setBeeFocus(bee) {
@@ -409,62 +371,61 @@ class BeeDetect {
         let canvas = this.frame
         let gray = new cv.Mat();
         cv.cvtColor(canvas, gray, cv.COLOR_RGBA2GRAY, 0);
-        let bees = new cv.RectVector();
+        let beeVec = new cv.RectVector();
 
         let minsize = new cv.Size(30, 30), maxsize = new cv.Size(200,200);
-        this.beesCascade.detectMultiScale(gray, bees, 1.1, 3, 0, minsize, maxsize);
+        this.beesCascade.detectMultiScale(gray, beeVec, 1.1, 3, 0, minsize, maxsize);
 
-        let beeFeatures = new Array(bees.size()); 
-        for (let i = 0; i < bees.size(); i++) {
-            let b = bees.get(i);
-            beeFeatures[i] = [];
+        let bees = new Array();
+        for (let i = 0; i < beeVec.size(); i++) {
+            let b = beeVec.get(i);
+            let fts = [];
             for (let j = 0; j < this.corner_pts.length; j++) {
                 if (this.containsPoint(b, this.corner_pts[j])) {
-                    beeFeatures[i].push(j);
+                    fts.push(j);
                 }
             }
+            if (fts.length > 0)
+                bees.push({rect: b, features: fts, area: b.width * b.height});
         }
 
-        let time = this.video.currentTime;
-        let isActive = new Array(bees.size());
-        isActive.fill(false);
+        if (bees.length > 0) {
+            let time = this.video.currentTime;
 
-        this.activeBees.forEach((bee) => {
-            bee.valid = false;
-            let minDist = this.frame.rows + this.frame.cols, minIndex = -1;
-            for (let i = 0; i < bees.size(); i++) {
-                if (!isActive[i]) {
-                    let r = bee.currRect;
-                    let dist = Math.abs(r.x - bees.get(i).x) + Math.abs(r.y - bees.get(i).y);
+            bees = this.getGoodBees(bees);
+
+            this.activeBees.forEach((bee) => {
+                bee.valid = false;
+                let r = bee.currRect;
+                let beeDist = bees.map(b => Math.abs(r.x - b.rect.x) + Math.abs(r.y - b.rect.y));
+                let minDist = beeDist[0], minIndex = 0;
+                beeDist.forEach((dist, i) => {
                     if (dist < minDist) {
-                        minDist = dist;
                         minIndex = i;
+                        minDist = dist;
                     }
+                });
+                if (minDist <= MAX_DIST_SAME) {
+                    bee.valid = true;
+                    bee.addRect(bees[minIndex].rect, this.curr_frame, time);
+                    bee.features = bees[minIndex].features;
+                    bees.splice(minIndex, 1);
                 }
-            }
-            if (minDist < MAX_DIST_SAME) {
-                bee.addRect(bees.get(minIndex), this.curr_frame, time);
-                bee.features = beeFeatures[minIndex];
-                bee.valid = true;
-                isActive[minIndex] = true;
-            }
-        });
+            });
 
-        let isGood = this.getGoodBees(bees, beeFeatures);
-
-        let snapshot = new cv.Mat();
-        for (let i = 0; i < bees.size(); i++) {
-            if (!isActive[i] && isGood[i]) {
-                snapshot = canvas.roi(bees.get(i));
-                let setFocusCB = (bee) => {
-                    this.setBeeFocus(bee);
-                };
-                let b = new Bee(this.next_id++, bees.get(i), beeFeatures[i], this.curr_frame, snapshot.clone(),
+            let snapshot = new cv.Mat();
+            let setFocusCB = (b) => {
+                this.setBeeFocus(b);
+            };
+            bees.forEach(bee => {
+                snapshot = canvas.roi(bee.rect);
+                let b = new Bee(this.next_id++, bee.rect, bee.features, this.curr_frame, snapshot.clone(),
                                 time, setFocusCB.bind(this));
                 this.activeBees.push(b);
-            }
+            });
+            snapshot.delete();
         }
-        gray.delete(); bees.delete(); snapshot.delete();
+        gray.delete(); beeVec.delete();
     }
 
     drawOneBee(b) {
@@ -483,12 +444,9 @@ class BeeDetect {
     }
 
     drawBees() {
-        for (var i = 0; i < this.activeBees.length; i++) {
-            let b = this.activeBees[i];
-            if (b.valid) {
-                this.drawOneBee(b);
-            }
-        }
+        this.activeBees.filter(b => b.valid).forEach(b => {
+            this.drawOneBee(b);
+        });
     }
 }
 
