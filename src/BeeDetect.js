@@ -35,7 +35,7 @@ class Bee {
         this.valid_ = true;
         this.snapshot = snapshot;
         this.vidTime = vidTime;
-        this.history = [{rect: rect, frame: frame}];
+        this.history = [{rect: rect, frame: frame, time: vidTime}];
         this.setFocusCB = setFocusCB;
     }
     destroy() {
@@ -65,13 +65,13 @@ class Bee {
     get lastActiveFrame() {
         return this.history[this.history.length - 1].frame;
     }
-    addRect(rect, frame) {
-        this.history.push({rect: rect, frame: frame});
+    addRect(rect, frame, time) {
+        this.history.push({rect: rect, frame: frame, time: time});
     }
-    adjustRect(x_off, y_off, frame) {
+    adjustRect(x_off, y_off, frame, time) {
         let r = this.currRect;
         let r2 = new cv.Rect(r.x+x_off, r.y+y_off, r.width, r.height);
-        this.addRect(r2, frame);
+        this.addRect(r2, frame, time);
     }
     contains(pt) {
         return this.currRect.contains(pt);
@@ -84,6 +84,7 @@ class BeeFocus {
         this.callback = callback;
         this.curr_frame = bee.history[0].frame;
         this.last_frame = bee.lastActiveFrame;
+        this.last_time = this.bee.history[this.bee.history.length - 1].time; 
         this.hist_index = 0;
         this.bee_.history.push(this.bee_.history[0]);
     }
@@ -94,17 +95,16 @@ class BeeFocus {
         this.bee_.history.pop();
         this.callback();
     }
-    isVisible() {
-        return this.curr_frame === this.bee_.history[this.hist_index].frame;
+    isVisible(time) {
+        return time >= this.bee_.history[this.hist_index].time;
     }
-    nextFrame() {
-        if (this.curr_frame == this.last_frame) {
+    nextFrame(time) {
+        if (time >= this.last_time) {
             return false;
         }
-        if (this.isVisible()) {
+        if (time >= this.bee_.history[this.hist_index].time) {
             this.bee_.history[this.bee_.history.length - 1] = this.bee_.history[this.hist_index++];
         }
-        this.curr_frame++;
         return true;
     }
 }
@@ -168,7 +168,6 @@ class BeeDetect {
         this.track_pts = new Array();
         this.point_map = new Array();
         
-        this.frameLag = 0.0;
         self = this;
     }
     
@@ -192,7 +191,6 @@ class BeeDetect {
         this.track = new cv.Mat();
         this.beesCascade = new cv.CascadeClassifier();
         this.beesCascade.load(this.class_file);
-        this.frameLag = 0.0;
         this.video.play().then(() => {
             setTimeout(this.processFrame, 0);
         });
@@ -224,11 +222,10 @@ class BeeDetect {
             let begin = Date.now();
             self.cap.read(self.frame);
             if (self.beeFocus !== null) {
-                if (self.beeFocus.isVisible()) {
-                    self.drawOneBee(self.beeFocus.bee);
-                }
+                let time = self.video.currentTime;
+                self.drawOneBee(self.beeFocus.bee);
                 cv.imshow(self.canvas_id, self.frame);
-                if (!self.beeFocus.nextFrame()) {
+                if (!self.beeFocus.nextFrame(time)) {
                     self.beeFocus.reset();
                 }
             }
@@ -268,7 +265,6 @@ class BeeDetect {
     storeBees() {
         this.activeBees.forEach((bee) => {
             if (bee.history.length == MIN_ARCHIVE_FRAMES && !this.savedBees.has(bee.id)) {
-                //console.log(this.frameLag / 1000);
                 this.addBee(bee);
                 this.savedBees.add(bee.id);
             }
@@ -326,6 +322,7 @@ class BeeDetect {
     }
 
     trackBees() {
+        let time = this.video.currentTime;
         this.activeBees.forEach(b => {
             if (!b.valid) return;
             let avg_x_offset = 0.0, avg_y_offset = 0.0;
@@ -345,7 +342,7 @@ class BeeDetect {
             else {
                 avg_x_offset /= num_tracked;
                 avg_y_offset /= num_tracked;
-                b.adjustRect(avg_x_offset, avg_y_offset, this.curr_frame);
+                b.adjustRect(avg_x_offset, avg_y_offset, this.curr_frame, time);
             }
         });
     }
@@ -353,7 +350,7 @@ class BeeDetect {
     //filter bees that contain other bees and are too big / small compared to avg (1.5 SD)
     getGoodBees(bees, beeFeatures) {
         let isGood = new Array(bees.size())
-        //*let tot_area = 0.0, n_bees = 0;
+        //let tot_area = 0.0, n_bees = 0;
         for (let i = 0; i < bees.size(); i++) {
             isGood[i] = beeFeatures.length > 0;
          /*   if (isGood[i]) {
@@ -361,8 +358,8 @@ class BeeDetect {
                 n_bees++;
             }*/
         }
-        //if (!n_bees) return isGood;
-        /*let avg_area = tot_area / n_bees;
+        /*if (!n_bees) return isGood;
+        let avg_area = tot_area / n_bees;
         let area_sd = 0.0;
         for (let i = 0; i < bees.size(); i++) {
             if (isGood[i]) {
@@ -372,8 +369,8 @@ class BeeDetect {
         }
         area_sd = Math.sqrt(area_sd / n_bees);*/
         for (let i = 0; i < bees.size() - 1; i++) {
-            //let area = bees[i].width * bees[i].height;
-            //isGood[i] &= Math.abs(area - avg_area) <= 1.5 * area_sd;
+            /*let area = bees[i].width * bees[i].height;
+            isGood[i] &= Math.abs(area - avg_area) <= 1.5 * area_sd;*/
             if (isGood[i]) {
                 let b1 = bees.get(i);
                 for (let j = i+1; j < bees.size(); j++) {
@@ -402,8 +399,6 @@ class BeeDetect {
         };
         this.beeFocus = new BeeFocus(bee, endFocusCB);
         this.video.currentTime = bee.vidTime;
-        //this.video.currentTime = bee.history[0].frame / FPS; 
-        //console.log(bee.vidTime, bee.history[0].frame / FPS, this.frameLag);
         if (!this.streaming) {
             this.startDetect();
         }
@@ -414,9 +409,6 @@ class BeeDetect {
         let gray = new cv.Mat();
         cv.cvtColor(canvas, gray, cv.COLOR_RGBA2GRAY, 0);
         let bees = new cv.RectVector();
-
-        /*let beesCascade = new cv.CascadeClassifier();
-        beesCascade.load(this.class_file);*/
 
         let minsize = new cv.Size(30, 30), maxsize = new cv.Size(200,200);
         this.beesCascade.detectMultiScale(gray, bees, 1.1, 3, 0, minsize, maxsize);
@@ -432,6 +424,7 @@ class BeeDetect {
             }
         }
 
+        let time = this.video.currentTime;
         let isActive = new Array(bees.size());
         isActive.fill(false);
 
@@ -449,7 +442,7 @@ class BeeDetect {
                 }
             }
             if (minDist < MAX_DIST_SAME) {
-                bee.addRect(bees.get(minIndex), this.curr_frame);
+                bee.addRect(bees.get(minIndex), this.curr_frame, time);
                 bee.features = beeFeatures[minIndex];
                 bee.valid = true;
                 isActive[minIndex] = true;
@@ -466,11 +459,11 @@ class BeeDetect {
                     this.setBeeFocus(bee);
                 };
                 let b = new Bee(this.next_id++, bees.get(i), beeFeatures[i], this.curr_frame, snapshot.clone(),
-                                this.video.currentTime, setFocusCB.bind(this));
+                                time, setFocusCB.bind(this));
                 this.activeBees.push(b);
             }
         }
-        gray.delete(); /*beesCascade.delete();*/ bees.delete(); snapshot.delete();
+        gray.delete(); bees.delete(); snapshot.delete();
     }
 
     drawOneBee(b) {
