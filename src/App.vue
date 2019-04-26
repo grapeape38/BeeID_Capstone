@@ -12,6 +12,7 @@
       <!--<Params v-model="params"/>-->
     </div>
     <BeeCanvas
+      v-on:switchXML="loadXML($event)"
       v-bind:vidURL="vidURL"
       v-bind:status="status"
       v-bind:streaming="beeDetect.streaming"
@@ -117,7 +118,7 @@ export default {
   width: 80%;
 }
 #leftDiv {
-  width: 20%;
+  width: 25%;
   float: left;
 }
 </style>

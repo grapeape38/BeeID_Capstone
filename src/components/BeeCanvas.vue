@@ -13,7 +13,8 @@
         <i v-if="!streaming" class="fa fa-play fa-2x"></i>
         <i v-else class="fa fa-stop fa-2x"></i>
       </span>
-      <video v-bind:class="{ inactive: streaming }" v-bind:src="vidURL" v-on:ended="videoEnd" id="videoInput" ref="video" width="640" height="480" @change="resizeVideo" muted></video>
+      <!--<video v-bind:class="{ inactive: streaming }" v-bind:src="vidURL" v-on:ended="videoEnd" id="videoInput" ref="video" width="640" height="480" @change="resizeVideo" muted></video>-->
+      <video v-bind:class="{ inactive: streaming }" v-bind:src="vidURL" v-on:ended="videoEnd" id="videoInput" ref="video" @change="resizeVideo" muted></video>
       <canvas v-bind:class="{ inactive: !streaming }" id="canvasOutput"></canvas>
     </div>
     </div>
@@ -30,6 +31,9 @@ export default {
   },
   mounted() {
       this.video = this.$refs.video;
+      //this.video.width = this.video.clientWidth;
+      //this.video.height = this.video.clientHeight;
+      //this.video.height = this.video.width * (this.video.videoHeight / this.video.videoWidth);
   },
   methods: {
     handleFileChange(e) {
@@ -42,9 +46,13 @@ export default {
       this.$emit('switchXML', class_url)
     },
     resizeVideo() {
-        this.video.height = this.video.width * (this.video.videoHeight / this.video.videoWidth);
+      this.video.height = this.video.width * (this.video.videoHeight / this.video.videoWidth);
     },
     videoPlayPause() {
+      if (!this.streaming) {
+        this.video.width = this.video.clientWidth;
+        this.resizeVideo();
+      }
       this.$emit('videoPlayPause');
     },
     videoEnd() {
@@ -62,8 +70,12 @@ export default {
 
 <!-- Add "scoped" attribute to limit CSS to this component only -->
 <style scoped>
+#videoInput {
+  width:100%;
+}
 #BeeCanvas {
-  max-width: 650px;
+  /*max-width: 650px;*/
+  width: 50%;
   float:left;
 }
 button, input {

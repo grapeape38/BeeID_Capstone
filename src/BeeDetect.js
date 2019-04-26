@@ -195,7 +195,12 @@ class BeeDetect {
         this.streaming = true;
         this.video = document.getElementById(this.video_id);
         this.cap = new cv.VideoCapture(this.video);
-        this.frame = new cv.Mat(this.video.height, this.video.width, cv.CV_8UC4);
+        //let height = this.video.videoHeight;
+        //let width = this.video.videoWidth;
+        //console.log(height, width);
+        let height = this.video.height;
+        let width = this.video.width;
+        this.frame = new cv.Mat(height, width, cv.CV_8UC4);
         this.prev_frame = new cv.Mat()
         this.corners = new cv.Mat();
         this.status = new cv.Mat();
