@@ -12,10 +12,11 @@
       <!--<Params v-model="params"/>-->
     </div>
     <BeeCanvas
-      v-on:switchXML="switchXML($event)"
       v-bind:vidURL="vidURL"
       v-bind:status="status"
       v-bind:streaming="beeDetect.streaming"
+      v-on:videoPlayPause="videoPlayPause"
+      v-on:videoEnd="videoEnd"
       v-on:loadVideo="loadVideo($event)"
       />
     <BeeArchive
@@ -41,14 +42,10 @@ export default {
    //Params
   },
   mounted() {
-      let url = 'classifiers/' + this.class_url;
+      let f = 'rpi11b.xml'; 
       this.$utils.loadOpenCv()
-        .then(() => {
-          this.$utils.createFileFromUrl(this.class_url, url);
-          this.status = "XML Loading...";
-      }).then(() => {
-          this.status = "Ready";
-      })
+        .then(() => this.loadXML(f));
+
       fetch('/getVideos').then((resp) => {
         return resp.json();
       }).then((json) => {this.videoList = json.videos})
@@ -63,7 +60,7 @@ export default {
     videoPlayPause() {
       if (!this.beeDetect.streaming) {
         this.clearBees();
-        this.bee_detector.startDetect();
+        this.beeDetect.startDetect();
       }
       else {
         this.videoEnd();
@@ -71,18 +68,11 @@ export default {
     },
     videoEnd() {
       if (this.beeDetect.streaming) {
-        this.bee_detector.stopDetect();
+        this.beeDetect.stopDetect();
       }
     },
-    uploadXML(e) {
-      let xmlFile = e.target.files[0];
-      let url = URL.createObjectURL(xmlFile);
-      this.status = "XML Loading..."
-      this.$utils.createFileFromUrl(xmlFile.name, url).then(() => {
-        this.status = "Ready";
-      });
-    },
-    switchXML(class_url) {
+    loadXML(class_url) {
+      this.beeDetect.classFile = class_url;
       this.status = "XML Loading..."
       let url = '/classifiers/' + class_url;
       this.$utils.createFileFromUrl(class_url, url).then(() => {
@@ -104,15 +94,13 @@ export default {
       console.log(zip.getEntries());
     },*/
     clearBees() {
-      this.beeDetect.beeList = [];
+      this.beeDetect.clearBees();
     }
   },
   data: function() {
     return { status: "OpenCV Loading...",
              videoList: [],
              beeDetect: new BeeDetect(video_id, canvas_id, "rpi11b.xml"),
-             //beeList: [],
-             class_url: "rpi11b.xml",
              vidURL: "videos/rpi12b_2018-07-15_11-45-49.mp4" }
   }
 }

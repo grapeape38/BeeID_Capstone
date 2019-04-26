@@ -116,7 +116,7 @@ const MIN_ARCHIVE_FRAMES = 40;
 const MAX_DIST_SAME = 40;
 const FPS = 30.0;
 
-class HyperParams {
+/*class HyperParams {
     constructor() {
         this.MAX_INACTIVE_FRAMES = 10;
         this.MIN_TRACK_PCT = 0.3;
@@ -140,16 +140,17 @@ class HyperParams {
             criteria: new cv.TermCriteria(cv.TERM_CRITERIA_EPS | cv.TERM_CRITERIA_COUNT, 10, 0.03)
         }
     }
-}
+}*/
 
 class BeeDetect {
-    constructor(video_id, canvas_id, class_file/*, addBee*/)  {
+    constructor(video_id, canvas_id, class_file)  {
         this.canvas_id = canvas_id; 
-        this.video = document.getElementById(video_id);
+        this.video_id = video_id;
+        this.video = null;
         this.streaming = false;
-        this.class_file = class_file;
         this.frame = null; 
         this.curr_frame = 0;
+        this.class_file = class_file;
         this.activeBees = new Array();
         this.cap = null;
         
@@ -171,6 +172,14 @@ class BeeDetect {
         
         self = this;
     }
+
+    get classFile() {
+        return this.class_file;
+    }
+
+    set classFile(file) {
+        this.class_file = file;
+    }
     
     destroy() {
         this.frame.delete();
@@ -184,6 +193,7 @@ class BeeDetect {
 
     startDetect() {
         this.streaming = true;
+        this.video = document.getElementById(this.video_id);
         this.cap = new cv.VideoCapture(this.video);
         this.frame = new cv.Mat(this.video.height, this.video.width, cv.CV_8UC4);
         this.prev_frame = new cv.Mat()
@@ -270,6 +280,10 @@ class BeeDetect {
                 this.savedBees.add(bee.id);
             }
         });
+    }
+    
+    clearBees() {
+        this.beeList = [];
     }
 
     getFeatures() {
