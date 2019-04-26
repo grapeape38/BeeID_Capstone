@@ -143,17 +143,18 @@ class HyperParams {
 }
 
 class BeeDetect {
-    constructor(video, canvas_id, class_file, addBee)  {
+    constructor(video_id, canvas_id, class_file/*, addBee*/)  {
         this.canvas_id = canvas_id; 
-        this.video = video;
-        this.cap = new cv.VideoCapture(video);
+        this.video = document.getElementById(video_id);
         this.streaming = false;
         this.class_file = class_file;
         this.frame = null; 
         this.curr_frame = 0;
         this.activeBees = new Array();
+        this.cap = null;
         
-        this.addBee = addBee; 
+        //this.addBee = addBee; 
+        this.beeList = [];
         this.savedBees = new Set();
         this.beeFocus = null;
         this.next_id = 0;
@@ -183,6 +184,7 @@ class BeeDetect {
 
     startDetect() {
         this.streaming = true;
+        this.cap = new cv.VideoCapture(this.video);
         this.frame = new cv.Mat(this.video.height, this.video.width, cv.CV_8UC4);
         this.prev_frame = new cv.Mat()
         this.corners = new cv.Mat();
@@ -263,7 +265,8 @@ class BeeDetect {
     storeBees() {
         this.activeBees.forEach((bee) => {
             if (bee.history.length == MIN_ARCHIVE_FRAMES && !this.savedBees.has(bee.id)) {
-                this.addBee(bee);
+                //this.addBee(bee);
+                this.beeList.push(bee);
                 this.savedBees.add(bee.id);
             }
         });

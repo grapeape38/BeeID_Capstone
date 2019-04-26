@@ -16,12 +16,7 @@
       <video v-bind:class="{ inactive: streaming }" v-bind:src="vidURL" v-on:ended="videoEnd" id="videoInput" ref="video" width="640" height="480" @change="resizeVideo" muted></video>
       <canvas v-bind:class="{ inactive: !streaming }" id="canvasOutput"></canvas>
     </div>
-    <!--<button v-if="status==='Ready'" v-on:click="videoPlayPause" v-on:ended="videoEnd">{{!streaming ? "Start Detection" : "Stop Video"}}</button>-->
-    <!--<div>
-      <label>Upload different XML Classifier</label>
-      <input type="file" id="xmlInput" name="xml" @change="$emit('xml_upload', $event)"/>
-    </div>-->
-  </div>
+    </div>
 </template>
 
 <script>
@@ -31,7 +26,7 @@ export default {
   props: {
     status: String,
     vidURL: String,
-    beeList: Array 
+    streaming: Boolean,
   },
   mounted() {
       this.video = this.$refs.video;
@@ -43,48 +38,23 @@ export default {
     },
     switchXML() {
       this.videoEnd();
-      this.class_url = this.$refs.xmlSelect.value;
-      this.$emit('switchXML', this.class_url)
+      let class_url = this.$refs.xmlSelect.value;
+      this.$emit('switchXML', class_url)
     },
     resizeVideo() {
         this.video.height = this.video.width * (this.video.videoHeight / this.video.videoWidth);
     },
-    addBee(bee) {
-      this.beeList.push(bee);
-    },
     videoPlayPause() {
-        if (!this.streaming) {
-          this.$emit('clearBees');
-          this.bee_detector = new BeeDetect(this.video, "canvasOutput", this.class_url, this.addBee);
-          this.bee_detector.startDetect();
-        }
-        else {
-          this.videoEnd();
-        }
+      this.$emit('videoPlayPause');
     },
     videoEnd() {
-      if (this.streaming && this.bee_detector) {
-        this.bee_detector.stopDetect();
-      }
-    }
-  },
-  watch: {
-    vidURL: function() {
-      this.videoEnd();
-    }
-  },
-  computed: {
-    streaming: function() {
-      return this.bee_detector !== null && this.bee_detector.streaming;
+      this.$emit('videoEnd');
     }
   },
   data: function() {
     return {
       video: null,
-      //vidSrc: "videos/rpi12b@2018-06-17@11-10-33.mp4",
-      class_url: "rpi11b.xml",
       xmlList: ["rpi11b.xml", "rpi12b.xml", "rpi24.xml", "class2.xml","class3.xml"],
-      bee_detector : null,
     };
   }
 }
