@@ -1,7 +1,8 @@
 .DS_Store
 node_modules
 /dist
-#/public/videos
+/public/videos
+/public/thumb
 
 # local env files
 .env.local
