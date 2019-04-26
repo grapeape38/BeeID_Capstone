@@ -13,7 +13,7 @@
         <i v-if="!streaming" class="fa fa-play fa-2x"></i>
         <i v-else class="fa fa-stop fa-2x"></i>
       </span>
-      <video v-bind:class="{ inactive: streaming }" v-bind:src="vidSrc" v-on:ended="videoEnd" id="videoInput" ref="video" width="640" height="480" @change="resizeVideo" muted></video>
+      <video v-bind:class="{ inactive: streaming }" v-bind:src="vidURL" v-on:ended="videoEnd" id="videoInput" ref="video" width="640" height="480" @change="resizeVideo" muted></video>
       <canvas v-bind:class="{ inactive: !streaming }" id="canvasOutput"></canvas>
     </div>
     <!--<button v-if="status==='Ready'" v-on:click="videoPlayPause" v-on:ended="videoEnd">{{!streaming ? "Start Detection" : "Stop Video"}}</button>-->
@@ -38,8 +38,8 @@ export default {
   },
   methods: {
     handleFileChange(e) {
-      this.videoEnd();
-      this.vidSrc = URL.createObjectURL(e.target.files[0]);
+      let url = URL.createObjectURL(e.target.files[0]);
+      this.$emit('loadVideo', url)
     },
     switchXML() {
       this.videoEnd();
@@ -63,15 +63,14 @@ export default {
         }
     },
     videoEnd() {
-      if (this.bee_detector) {
+      if (this.streaming && this.bee_detector) {
         this.bee_detector.stopDetect();
       }
     }
   },
   watch: {
-    vidURL: function(newVal, oldVal) {
+    vidURL: function() {
       this.videoEnd();
-      this.vidSrc = newVal;
     }
   },
   computed: {
@@ -83,7 +82,6 @@ export default {
     return {
       video: null,
       //vidSrc: "videos/rpi12b@2018-06-17@11-10-33.mp4",
-      vidSrc: "videos/rpi12b_2018-07-15_11-45-49.mp4",
       class_url: "rpi11b.xml",
       xmlList: ["rpi11b.xml", "rpi12b.xml", "rpi24.xml", "class2.xml","class3.xml"],
       bee_detector : null,

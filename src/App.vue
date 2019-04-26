@@ -17,6 +17,7 @@
       v-bind:vidURL="vidURL"
       v-bind:status="status"
       v-bind:beeList="beeList"
+      v-on:loadVideo="loadVideo($event)"
       v-on:clearBees="clearBees"/>
     <BeeArchive
       v-bind:beeList="beeList"/>
@@ -91,7 +92,7 @@ export default {
     }
   },
   data: function() {
-    return { status: "OpenCV Loading...", vidURL: "", videoList: [], beeList: []/*, params: new HyperParams()*/}
+    return { status: "OpenCV Loading...", videoList: [], beeList: [], vidURL: "videos/rpi12b_2018-07-15_11-45-49.mp4" }
   }
 }
 </script>
